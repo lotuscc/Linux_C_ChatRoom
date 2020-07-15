@@ -13,6 +13,9 @@
 
 #include <pthread.h>
 
+#include <sqlite3.h>
+
+
 #define PORT 33333
 
 struct Message 
@@ -32,6 +35,66 @@ struct UserOnlineNode
 //typedef struct UserOnlineNode* PUserOnlineNode;
 
 struct UserOnlineNode Head;
+sqlite3* db = NULL;
+
+int RegtoDatabase(char* name, char* passwd){
+
+    char *zErrMsg = 0;
+    int  rc;
+
+    /* Create SQL statement */
+    char* sql = "INSERT INTO COMPANY (ID,NAME,PASSWD) "  \
+                "VALUES (4, 'Mark', 25); ";
+
+    /* Execute SQL statement */
+    rc = sqlite3_exec(db, sql, NULL, NULL, &zErrMsg);
+    if( rc != SQLITE_OK ){
+        fprintf(stderr, "SQL error: %s\n", zErrMsg);
+        sqlite3_free(zErrMsg);
+
+        return -1;
+    }else{
+        fprintf(stdout, "Records created successfully\n\n");
+    }
+
+    return 1;
+}
+
+
+int InquirefromDatabase(char* name, char* passwd){
+
+    char *zErrMsg = 0;
+    int nrow=0;
+    int ncolumn = 0;
+    char **azResult=NULL; 
+
+    /* Create merged SQL statement */
+    char* sql="SELECT * from COMPANY";
+    
+    sqlite3_get_table( db , sql , &azResult , &nrow , &ncolumn , &zErrMsg );
+    
+    printf("nrow = %d ncolumn = %d\n", nrow, ncolumn);
+    printf("the result is:\n");
+    for(int i = 0; i < (nrow + 1) * ncolumn; i++){
+        printf("azResult[%d]=%s\n", i, azResult[i]);
+    }
+    
+	sqlite3_free_table(azResult);
+
+    return 1;
+}
+
+
+
+static int callback(void *data, int argc, char **argv, char **azColName){
+   int i;
+   fprintf(stderr, "%s: \n", (const char*)data);
+   for(i=0; i<argc; i++){
+      printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+   }
+   printf("\n");
+   return 0;
+}
 
 
 void Insert_online(struct UserOnlineNode* Head, struct UserOnlineNode* new){
@@ -122,7 +185,11 @@ void* recv_message(void* arg){
         switch (msg->type){
         
         case 1:
+            //从数据库中查询用户密码是否匹配
+            
 
+
+            // 注册到在线用户表
             user = (struct UserOnlineNode*)malloc(sizeof(struct UserOnlineNode));
 
             user->sockfd = sockfd;
@@ -136,6 +203,18 @@ void* recv_message(void* arg){
             send(sockfd, msg, sizeof(struct Message), 0);
 
             break;
+        case 2:
+            //注册到数据库中    
+
+
+
+
+            msg->type = -2;
+
+            send(sockfd, msg, sizeof(struct Message), 0);
+
+            break;
+
         case 3:
 
             printf("debug receive a message\n");
@@ -191,6 +270,39 @@ int main()
     struct sigaction sa;
     sa.sa_handler = SIG_IGN;
     sigaction( SIGPIPE, &sa, 0 );
+
+    // init database
+    char *zErrMsg = 0;
+    char* sql;
+    int rc;
+
+    /* Open database */
+    int len = sqlite3_open("ChatRoomdb", &db);
+    
+    if(len){
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        exit(0);
+    }
+    else{
+        printf("You have opened a sqlite3 database successfully!\n");
+    } 
+
+    /* Create SQL statement */
+    sql = "CREATE TABLE COMPANY("  \
+          "ID INT PRIMARY KEY     NOT NULL," \
+          "NAME           TEXT    NOT NULL," \
+          "PASSWD         TEXT    NOT NULL);";
+
+     /* Execute SQL statement */
+    rc = sqlite3_exec(db, sql, NULL, NULL, &zErrMsg);
+    if( rc != SQLITE_OK ){
+        fprintf(stderr, "SQL error: %s\n", zErrMsg);
+        sqlite3_free(zErrMsg);
+    }else{
+        fprintf(stdout, "Table created successfully\n\n");
+    }
+
 
 
     // init user online head

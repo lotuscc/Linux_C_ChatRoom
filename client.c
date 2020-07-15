@@ -15,6 +15,8 @@
 
 #include <pthread.h>
 
+
+
 #define PORT 33333
 
 
@@ -51,6 +53,10 @@ void* recv_message(void* arg){
         
         case -1:
             printf("%s login successful\n", msg->msg);
+
+            break;
+        case -2:
+            printf("%s reg successful\n", msg->name);
 
             break;
         case -3:
@@ -114,10 +120,14 @@ int main()
             
             send(sockfd, msg, sizeof(struct Message), 0);
 
-        }else if (strcmp(cmd, "reg") == 0)
-        {
-            
+        }else if (strcmp(cmd, "reg") == 0){
+            msg->type = 2;
+            printf("name:\n");
+            scanf("%s", msg->name);
+            printf("passwd:\n");
+            scanf("%s", msg->msg);
 
+            send(sockfd, msg, sizeof(struct Message), 0);
 
         }else if(strcmp(cmd, "send") == 0){
             msg->type = 3;
@@ -138,8 +148,9 @@ int main()
 
             send(sockfd, msg, sizeof(struct Message), 0);
 
+        }else{
+            printf("cmd error!\n");
         }
-        
     }
     
     
