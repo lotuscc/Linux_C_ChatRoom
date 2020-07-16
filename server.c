@@ -43,8 +43,22 @@ int RegtoDatabase(char* name, char* passwd){
     int  rc;
 
     /* Create SQL statement */
-    char* sql = "INSERT INTO COMPANY (ID,NAME,PASSWD) "  \
-                "VALUES (4, 'Mark', 25); ";
+    char* sql1 = "INSERT INTO COMPANY (NAME,PASSWD) "  \
+                "VALUES ('";
+
+    char* sql2 = "',";
+    char* sql3 = "); ";
+
+    char* sql = (char*)malloc(strlen(sql1) + strlen(name) + strlen(sql2) + \
+                                                        strlen(passwd) + strlen(sql3));
+
+    strcpy(sql, sql1);
+    strcat(sql, name);
+    strcat(sql, sql2);
+    strcat(sql, passwd);
+    strcat(sql, sql3);
+
+    printf("sql: %s\n", sql);
 
     /* Execute SQL statement */
     rc = sqlite3_exec(db, sql, NULL, NULL, &zErrMsg);
@@ -57,6 +71,8 @@ int RegtoDatabase(char* name, char* passwd){
         fprintf(stdout, "Records created successfully\n\n");
     }
 
+
+    free(sql);
     return 1;
 }
 
@@ -67,34 +83,43 @@ int InquirefromDatabase(char* name, char* passwd){
     int nrow=0;
     int ncolumn = 0;
     char **azResult=NULL; 
+    int ret = 0;
 
     /* Create merged SQL statement */
-    char* sql="SELECT * from COMPANY";
-    
+    char* sql1 = "SELECT * from COMPANY WHERE NAME='";
+    char* sql2 = "';";
+
+    char* sql = (char*)malloc(strlen(sql1) + strlen(name) + strlen(sql2));
+
+    strcpy(sql, sql1);
+    strcat(sql, name);
+    strcat(sql, sql2);
+
+    printf("sql: %s\n", sql);
+
     sqlite3_get_table( db , sql , &azResult , &nrow , &ncolumn , &zErrMsg );
     
     printf("nrow = %d ncolumn = %d\n", nrow, ncolumn);
     printf("the result is:\n");
     for(int i = 0; i < (nrow + 1) * ncolumn; i++){
-        printf("azResult[%d]=%s\n", i, azResult[i]);
+         printf("azResult[%d]=%s\n", i, azResult[i]);
     }
-    
+
+    if(nrow * ncolumn == 0){
+        ret = -1;
+    }else if (strcmp(azResult[3], passwd) == 0)
+    {
+        ret = 1;
+    }else{
+        ret = -1;
+    }
+
+
 	sqlite3_free_table(azResult);
 
-    return 1;
+    return ret;
 }
 
-
-
-static int callback(void *data, int argc, char **argv, char **azColName){
-   int i;
-   fprintf(stderr, "%s: \n", (const char*)data);
-   for(i=0; i<argc; i++){
-      printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-   }
-   printf("\n");
-   return 0;
-}
 
 
 void Insert_online(struct UserOnlineNode* Head, struct UserOnlineNode* new){
@@ -186,27 +211,33 @@ void* recv_message(void* arg){
         
         case 1:
             //从数据库中查询用户密码是否匹配
+            if(InquirefromDatabase(msg->name, msg->msg) == 1){
+                printf("%s logon successful\n", msg->name);
+                msg->type = -1;
+
+                // 注册到在线用户表
+                user = (struct UserOnlineNode*)malloc(sizeof(struct UserOnlineNode));
+
+                user->sockfd = sockfd;
+                strcpy(user->name, msg->name);
+                user->next = NULL;
+
+                Insert_online(&Head, user);
+                send(sockfd, msg, sizeof(struct Message), 0);
+
+            }else{
+                printf("%s logon failed\n", msg->name);
+            }
             
-
-
-            // 注册到在线用户表
-            user = (struct UserOnlineNode*)malloc(sizeof(struct UserOnlineNode));
-
-            user->sockfd = sockfd;
-            strcpy(user->name, msg->msg);
-            user->next = NULL;
-
-            Insert_online(&Head, user);
-
-            msg->type = -1;
-
-            send(sockfd, msg, sizeof(struct Message), 0);
 
             break;
         case 2:
             //注册到数据库中    
-
-
+            if(RegtoDatabase(msg->name, msg->msg) < 0){
+                printf("reg failed\n");
+                break;
+            }
+            
 
 
             msg->type = -2;
@@ -222,9 +253,12 @@ void* recv_message(void* arg){
             user = Find_online_byname(&Head, msg->name);
 
             from = Find_online_bysockfd(&Head, sockfd);
-            strcpy(msg->name, from->name);
 
-            if(user == NULL){
+            if(from != NULL){
+                strcpy(msg->name, from->name);
+            }
+            
+            if(user == NULL || from == NULL){
                 printf("user is not log on\n");
             }else{
                 msg->type = -3;            
@@ -241,11 +275,13 @@ void* recv_message(void* arg){
             msg->type = -4;
 
             from = Find_online_bysockfd(&Head, sockfd);
-            strcpy(msg->name, from->name);
-
+            if(from != NULL){
+                strcpy(msg->name, from->name);
+            }
+            
             user = Head.next;
 
-            while (user != NULL){
+            while (user != NULL && from != NULL){
                 send(user->sockfd, msg, sizeof(struct Message), 0);
                 user = user->next;
                 usleep(3);
@@ -290,8 +326,7 @@ int main()
 
     /* Create SQL statement */
     sql = "CREATE TABLE COMPANY("  \
-          "ID INT PRIMARY KEY     NOT NULL," \
-          "NAME           TEXT    NOT NULL," \
+          "NAME           TEXT  PRIMARY KEY  NOT NULL," \
           "PASSWD         TEXT    NOT NULL);";
 
      /* Execute SQL statement */
@@ -327,7 +362,7 @@ int main()
     bzero(&addr, sizeof (struct sockaddr_in));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(PORT);
-    addr.sin_addr.s_addr = inet_addr("192.168.1.105"); //自己主机IP
+    addr.sin_addr.s_addr = inet_addr("192.168.43.106"); //自己主机IP
 
     if(bind(sockfd, (struct sockaddr*)(&addr), sizeof (struct sockaddr_in)) < 0){
         perror("bind failed!");

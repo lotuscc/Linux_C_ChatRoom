@@ -52,7 +52,7 @@ void* recv_message(void* arg){
         switch (msg->type){
         
         case -1:
-            printf("%s login successful\n", msg->msg);
+            printf("%s login successful\n", msg->name);
 
             break;
         case -2:
@@ -89,7 +89,7 @@ int main()
     bzero(&s_addr, sizeof (struct sockaddr_in));
     s_addr.sin_family = AF_INET;
     s_addr.sin_port = htons(PORT);
-    s_addr.sin_addr.s_addr = inet_addr("192.168.1.105");
+    s_addr.sin_addr.s_addr = inet_addr("192.168.43.106");
 
     if(connect(sockfd, (struct sockaddr*)(&s_addr), sizeof (struct sockaddr_in)) < 0){
         perror("connect failed!");
@@ -116,6 +116,9 @@ int main()
             msg->type = 1;
 
             printf("name: \n");
+            scanf("%s", msg->name);
+
+            printf("passwd: \n");
             scanf("%s", msg->msg);
             
             send(sockfd, msg, sizeof(struct Message), 0);
